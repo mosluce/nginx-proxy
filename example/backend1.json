@@ -1,0 +1,17 @@
+{
+  "proto": "http",
+  "port": 8080,
+  "gzip": true,
+  "client": {
+    "maxBodySize": "20m"
+  },
+  "upstream": {
+    "name": "backend1",
+    "targets": [
+      {
+        "hostname": "backend1",
+        "port": 80
+      }
+    ]
+  }
+}

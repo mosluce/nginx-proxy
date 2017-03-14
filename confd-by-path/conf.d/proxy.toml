@@ -1,0 +1,4 @@
+[template]
+src = "proxy.conf.tmpl"
+dest = "/etc/nginx/proxy.conf"
+reload_cmd = "nginx -s reload"

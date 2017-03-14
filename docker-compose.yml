@@ -1,0 +1,41 @@
+version: "3"
+
+services:
+  proxy-vhost:
+    build:
+      context: .
+    environment:
+      DEVOPS_CONFD_DIR: confd-vhost
+      DEVOPS_CONFIG_ROOT: devops
+      DEVOPS_CONFD_ARGS: "-watch -backend etcd -node http://localhost:2379"
+    image: poddworks/nginx-proxy:stable
+    ports:
+      - "8888:8080"
+    networks:
+      - backend
+
+  proxy-by-path:
+    build:
+      context: .
+    environment:
+      DEVOPS_CONFD_DIR: confd-by-path
+      DEVOPS_CONFIG_ROOT: devops
+      DEVOPS_CONFD_ARGS: "-watch -backend etcd -node http://localhost:2379"
+    image: poddworks/nginx-proxy:stable
+    ports:
+      - "8888:80"
+    networks:
+      - backend
+
+  backend1:
+    image: nginx:stable
+    networks:
+      - backend
+
+  backend2:
+    image: nginx:stable
+    networks:
+      - backend
+
+networks:
+  backend:
