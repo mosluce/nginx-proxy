@@ -1,44 +1,98 @@
-log_format vhost '$host $remote_addr - $remote_user [$time_local] '
-                 '"$request" $status $body_bytes_sent '
-                 '"$http_referer" "$http_user_agent"';
 
-access_log off;
+user  nginx;
+worker_processes  1;
 
-include /etc/nginx/proxy.conf;
+error_log  /var/log/nginx/error.log warn;
+pid        /var/run/nginx.pid;
 
-{{ range gets "/backend/*" }}
-{{ $service := .Key }}
-{{ $config := json .Value }}
-{{ $upstream := $config.upstream }}
-upstream {{ $upstream.name }} {
-  {{ range $target := $upstream.targets }}
-  server {{ $target.hostname }}:{{ $target.port }};
-  {{ end }}
+events {
+  worker_connections  1024;
 }
-{{ end }}
 
-server {
-  listen 80;
+http {
+  include       /etc/nginx/mime.types;
+  default_type  application/octet-stream;
 
-  access_log /var/log/nginx/access.log vhost;
+  log_format vhost '$host $remote_addr - $remote_user [$time_local] '
+                   '"$request" $status $body_bytes_sent '
+                   '"$http_referer" "$http_user_agent"';
 
-  location /_ah/health {
-    return 200 'ok';
-    add_header Content-Type text/plain;
+  access_log off;
+
+  sendfile        on;
+  #tcp_nopush     on;
+
+  keepalive_timeout  65;
+
+  # If we receive X-Forwarded-Proto, pass it through; otherwise, pass along the
+  # scheme used to connect to this server
+  map $http_x_forwarded_proto $proxy_x_forwarded_proto {
+    default $http_x_forwarded_proto;
+    '' $scheme;
   }
+
+  # If we receive X-Forwarded-Port, pass it through; otherwise, pass along the
+  # server port the client connected to
+  map $http_x_forwarded_port $proxy_x_forwarded_port {
+    default $http_x_forwarded_port;
+    '' $server_port;
+  }
+
+  # If we receive Upgrade, set Connection to "upgrade"; otherwise, delete any
+  # Connection header that may have been passed to this server
+  map $http_upgrade $proxy_connection {
+    default upgrade;
+    '' close;
+  }
+
+  # HTTP 1.1 support
+  proxy_http_version 1.1;
+  proxy_buffering off;
+  proxy_set_header Host $http_host;
+  proxy_set_header Upgrade $http_upgrade;
+  proxy_set_header Connection $proxy_connection;
+  proxy_set_header X-Real-IP $remote_addr;
+  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+  proxy_set_header X-Forwarded-Proto $proxy_x_forwarded_proto;
+  proxy_set_header X-Forwarded-Port $proxy_x_forwarded_port;
+
+  # Mitigate httpoxy attack (see README for details)
+  proxy_set_header Proxy "";
 
   {{ range gets "/backend/*" }}
   {{ $service := .Key }}
   {{ $config := json .Value }}
   {{ $upstream := $config.upstream }}
-  location /{{ base $service }} {
-    {{ if $config.enforce_client_https }}
-    if ($proxy_x_forwarded_proto != "https") {
-      rewrite ^(.*)$ https://$server_name$1 permanent;
-    }
+  upstream {{ $upstream.name }} {
+    {{ range $target := $upstream.targets }}
+    server {{ $target.hostname }}:{{ $target.port }};
     {{ end }}
-    rewrite /{{ base $service }}(.*) $1  break;
-    proxy_pass {{ $config.proto }}://{{ $upstream.name }};
   }
   {{ end }}
+
+  server {
+    listen 80;
+
+    access_log /var/log/nginx/access.log vhost;
+
+    location /_ah/health {
+      return 200 'ok';
+      add_header Content-Type text/plain;
+    }
+
+    {{ range gets "/backend/*" }}
+    {{ $service := .Key }}
+    {{ $config := json .Value }}
+    {{ $upstream := $config.upstream }}
+    location /{{ base $service }} {
+      {{ if $config.enforce_client_https }}
+      if ($proxy_x_forwarded_proto != "https") {
+        rewrite ^(.*)$ https://$server_name$1 permanent;
+      }
+      {{ end }}
+      rewrite /{{ base $service }}(.*) $1  break;
+      proxy_pass {{ $config.proto }}://{{ $upstream.name }};
+    }
+    {{ end }}
+  }
 }
