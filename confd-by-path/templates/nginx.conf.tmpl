@@ -73,6 +73,9 @@ http {
   server {
     listen 80;
 
+    proxy_read_timeout 300s;
+    proxy_send_timeout 300s;
+
     access_log /var/log/nginx/access.log vhost;
 
     location /_ah/health {
