@@ -93,6 +93,9 @@ http {
         rewrite ^(.*)$ https://$server_name$1 permanent;
       }
       {{ end }}
+      {{ if $config.cors }}
+      add_header 'Access-Control-Allow-Origin' '{{ $config.cors.allowed_origin }}';
+      {{ end }}
       rewrite /{{ base $service }}(.*) $1  break;
       proxy_pass {{ $config.proto }}://{{ $upstream.name }};
     }
