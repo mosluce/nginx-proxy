@@ -10,6 +10,8 @@ events {
 }
 
 http {
+  server_tokens off;
+
   include       /etc/nginx/mime.types;
   default_type  application/octet-stream;
 
@@ -55,6 +57,9 @@ http {
   # Mitigate httpoxy attack (see README for details)
   proxy_set_header Proxy "";
 
+  # Remove unnecessary info provided from upstream
+  proxy_hide_header X-Powered-By;
+
   {{ range gets "/backend/*" }}
   {{ $service := .Key }}
   {{ $config := json .Value }}
@@ -88,6 +93,9 @@ http {
       if ($proxy_x_forwarded_proto != "https") {
         rewrite ^(.*)$ https://$server_name$1 permanent;
       }
+      {{ end }}
+      {{ range $entry := $config.proxy_set_headers }}
+      proxy_set_header {{ $entry.header }} {{ $entry.value }}
       {{ end }}
       {{ if $config.cors }}
       add_header 'Access-Control-Allow-Origin' '{{ $config.cors.allowed_origin }}';
